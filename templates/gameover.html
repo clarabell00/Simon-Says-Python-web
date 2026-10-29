@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Color Matcher - Game Over</title>
+    <!-- Manggil CSS Terpisah dari Folder Static -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="gameover-body">
+
+<!-- 1. OVERLAY LAYER -->
+<div class="video-overlay"></div>
+
+<!-- 2. KONTROL MUSIK (PLAY/PAUSE & VOLUME SLIDER) -->
+<div class="music-control">
+    <button id="music-toggle-btn" class="music-btn" title="Play/Pause Musik">
+        <span id="music-icon">🎵</span>
+    </button>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.3" title="Atur Volume">
+</div>
+
+<!-- 3. AUDIO MUSIK KHUSUS GAME OVER -->
+<audio id="go-music" loop autoplay preload="auto">
+    <!-- Menggunakan nama file game_over.mp3 agar rapi tanpa spasi/simbol -->
+    <source src="{{ url_for('static', filename='media/game_over.mp3') }}" type="audio/mpeg">
+</audio>
+
+<!-- TOMBOL BACK DI KIRI ATAS -->
+<a href="{{ url_for('home') }}" class="back-btn" onclick="resetMusicTime()">&larr; KEMBALI</a>
+
+<div class="game-container">
+    <!-- BODI KONSOL DENGAN EFEK GLOW CONTAINER -->
+    <div class="console-body go-console">
+        
+        <!-- LAYAR KONSOL GAME OVER -->
+        <div class="console-screen go-screen">
+            <div class="screen-top-info" style="justify-content: flex-start;">
+                <span>TIME</span>
+            </div>
+
+            <div class="go-title">GAME OVER</div>
+            
+            <!-- 4 BULATAN LAYAR DENGAN WARNA JAWABAN BENAR -->
+            <div class="circles-container">
+                <div class="color-circle" id="ans-0"></div>
+                <div class="color-circle" id="ans-1"></div>
+                <div class="color-circle" id="ans-2"></div>
+                <div class="color-circle" id="ans-3"></div>
+            </div>
+
+            <div class="go-score">SCORE {{ score if score else 0 }}</div>
+            <a href="{{ url_for('halaman_cara_bermain') }}" class="go-btn" onclick="resetMusicTime()">TRY AGAIN</a>
+        </div>
+
+        <!-- AREA KONTROL BERANIMASI (D-PAD & ACTION BUTTONS) -->
+        <div class="controls-area">
+            <!-- D-PAD (+) DENGAN GLOW HALUS -->
+            <div class="d-pad anim-dpad-soft">
+                <div class="d-pad-h"></div>
+                <div class="d-pad-v"></div>
+            </div>
+
+            <!-- TOMBOL WARNA DENGAN SOFT GLOW BERGANTIAN -->
+            <div class="action-buttons" style="margin-top: 20px;">
+                <div class="action-btn btn-red anim-red-soft"></div>
+                <div class="action-btn btn-yellow anim-yellow-soft"></div>
+                <div class="action-btn btn-blue anim-blue-soft"></div>
+                <div class="action-btn btn-green anim-green-soft"></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- KONTROL AUDIO GAMEOVER ---
+    const goMusic = document.getElementById('go-music');
+    const musicBtn = document.getElementById('music-toggle-btn');
+    const musicIcon = document.getElementById('music-icon');
+    const volumeSlider = document.getElementById('volume-slider');
+
+    // Terapkan volume tersimpan dari localStorage jika ada
+    const savedVolume = localStorage.getItem('musicVolume');
+    if (savedVolume) {
+        goMusic.volume = parseFloat(savedVolume);
+        volumeSlider.value = savedVolume;
+    } else {
+        goMusic.volume = volumeSlider.value;
+    }
+
+    // Memutar musik Game Over secara otomatis
+    window.addEventListener('DOMContentLoaded', () => {
+        goMusic.play().catch(err => {
+            console.log("Autoplay musik diblokir browser, menunggu interaksi pengguna:", err);
+        });
+    });
+
+    musicBtn.addEventListener('click', () => {
+        if (goMusic.paused) {
+            goMusic.play();
+            musicIcon.innerText = '🎵';
+        } else {
+            goMusic.pause();
+            musicIcon.innerText = '🔇';
+        }
+    });
+
+    volumeSlider.addEventListener('input', (e) => {
+        goMusic.volume = e.target.value;
+        localStorage.setItem('musicVolume', e.target.value);
+        if (e.target.value == 0) {
+            musicIcon.innerText = '🔇';
+        } else if (!goMusic.paused) {
+            musicIcon.innerText = '🎵';
+        }
+    });
+
+    // Fallback autoplay jika diblokir browser saat awal pindah halaman
+    window.addEventListener('click', () => {
+        if (goMusic.paused && musicIcon.innerText !== '🔇') {
+            goMusic.play().catch(err => console.log("Autoplay diblokir:", err));
+        }
+    }, { once: true });
+
+
+    // --- RENDER BULATAN KUNCI JAWABAN ---
+    const colorHex = {
+        'red': '#ff4757',
+        'blue': '#0984e3',
+        'yellow': '#ffa502',
+        'green': '#2ed573'
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const kunciParam = urlParams.get('kunci') || "{{ kunci_raw }}";
+
+        if (kunciParam && kunciParam !== 'None') {
+            const kunciList = kunciParam.split(',');
+            kunciList.forEach((color, index) => {
+                const targetCircle = document.getElementById(`ans-${index}`);
+                if (targetCircle && colorHex[color.trim()]) {
+                    targetCircle.style.backgroundColor = colorHex[color.trim()];
+                }
+            });
+        }
+    });
+
+    // Reset detik lagu utama agar saat "TRY AGAIN" / "KEMBALI", musik utama di-play dari awal
+    function resetMusicTime() {
+        localStorage.removeItem('musicTime');
+    }
+</script>
+
+</body>
+</html>

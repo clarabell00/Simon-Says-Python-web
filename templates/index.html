@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Color Matcher</title>
+
+  <!-- WAJIB PAKAI SINTAKS FLASK INI -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- 1. VIDEO BACKGROUND KHUSUS INDEX -->
+  <video autoplay muted loop id="bg-video">
+    <source src="{{ url_for('static', filename='media/background.mp4') }}" type="video/mp4">
+    Browser kamu tidak mendukung video background.
+  </video>
+  <div class="video-overlay"></div>
+
+  <!-- 2. KONTROL MUSIK (MELAYANG DI POJOK KANAN ATAS) -->
+  <div class="music-control">
+    <button id="music-toggle-btn" class="music-btn" title="Play/Pause Musik">
+      <span id="music-icon">🎵</span>
+    </button>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.3" title="Atur Volume">
+  </div>
+
+  <!-- 3. AUDIO BACKGROUND (NAMA FILE HURUF KECIL BG_MUSIK.MP3) -->
+  <audio id="bg-music" loop preload="auto">
+    <source src="{{ url_for('static', filename='media/bg_musik.mp3') }}" type="audio/mpeg">
+  </audio>
+
+  <!-- 4. CONTAINER UTAMA GAME -->
+  <div class="game-container">
+    <div class="title" style="top: 360px; font-size: 64px; line-height: 1.1;">
+      MEMORY COLOR<br>MATCHER
+    </div>
+    <a href="{{ url_for('halaman_cara_bermain') }}" class="start-btn">
+      <div class="start-text">START</div>
+    </a>
+  </div>
+
+  <!-- 5. SCRIPT MUSIK SEAMLESS & AUTOPLAY -->
+  <script>
+    const bgMusic = document.getElementById('bg-music');
+    const musicBtn = document.getElementById('music-toggle-btn');
+    const musicIcon = document.getElementById('music-icon');
+    const volumeSlider = document.getElementById('volume-slider');
+
+    // 1. Ambil status volume & detik lagu dari localStorage (jika ada)
+    const savedTime = localStorage.getItem('musicTime');
+    const savedVolume = localStorage.getItem('musicVolume');
+    const isMuted = localStorage.getItem('musicMuted');
+
+    if (savedTime) bgMusic.currentTime = parseFloat(savedTime);
+    if (savedVolume) {
+      bgMusic.volume = parseFloat(savedVolume);
+      volumeSlider.value = savedVolume;
+    } else {
+      bgMusic.volume = volumeSlider.value;
+    }
+
+    // 2. Simpan posisi waktu lagu secara terus-menerus
+    bgMusic.addEventListener('timeupdate', () => {
+      localStorage.setItem('musicTime', bgMusic.currentTime);
+    });
+
+    // 3. Fungsi memutar audio
+    function playAudio() {
+      if (isMuted === 'true') return;
+      bgMusic.play().then(() => {
+        musicIcon.innerText = '🎵';
+      }).catch(err => {
+        console.log("Autoplay ditahan browser, menunggu interaksi pengguna:", err);
+      });
+    }
+
+    // Tombol Play / Pause
+    musicBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (bgMusic.paused) {
+        localStorage.setItem('musicMuted', 'false');
+        playAudio();
+      } else {
+        bgMusic.pause();
+        localStorage.setItem('musicMuted', 'true');
+        musicIcon.innerText = '🔇';
+      }
+    });
+
+    // Slider Volume
+    volumeSlider.addEventListener('input', (e) => {
+      bgMusic.volume = e.target.value;
+      localStorage.setItem('musicVolume', e.target.value);
+      if (e.target.value == 0) {
+        musicIcon.innerText = '🔇';
+      } else if (!bgMusic.paused) {
+        musicIcon.innerText = '🎵';
+      }
+    });
+
+    // Pancing audio saat ada interaksi pertama di layar
+    const unlockAudio = () => {
+      if (bgMusic.paused && localStorage.getItem('musicMuted') !== 'true') {
+        playAudio();
+      }
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+  </script>
+
+</body>
+</html>

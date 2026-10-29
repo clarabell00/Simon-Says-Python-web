@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Color Matcher - Game Play</title>
+    <!-- Manggil CSS Terpisah dari Folder Static -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="ingame-page">
+
+<!-- 2. KONTROL MUSIK (PLAY/PAUSE & VOLUME SLIDER) -->
+<div class="music-control">
+    <button id="music-toggle-btn" class="music-btn" title="Play/Pause Musik">
+        <span id="music-icon">🎵</span>
+    </button>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.3" title="Atur Volume">
+</div>
+
+<!-- 3. AUDIO BACKGROUND & SOUND EFFECTS -->
+<audio id="bg-music" loop preload="auto">
+    <source src="{{ url_for('static', filename='media/bg_musik.mp3') }}" type="audio/mpeg">
+</audio>
+
+<!-- SFX Klik Tombol Warna -->
+<audio id="sfx-click" preload="auto">
+    <source src="{{ url_for('static', filename='media/click.mp3') }}" type="audio/mpeg">
+</audio>
+
+<!-- SFX Tebakan Benar -->
+<audio id="sfx-correct" preload="auto">
+    <source src="{{ url_for('static', filename='media/benar.wav') }}" type="audio/wav">
+</audio>
+
+<!-- 4. CONTAINER GAME & KONSOL -->
+<div class="game-container">
+    <!-- Navigasi Kembali ke Halaman Cara Bermain -->
+    <a href="{{ url_for('halaman_cara_bermain') }}" class="back-btn">&larr; KEMBALI</a>
+
+    <div class="console-body">
+        <div class="console-screen">
+            <div class="screen-top-info">
+                <span id="timer-display">TIME 5s</span>
+                <span id="status-info">INGAT POLANYA</span>
+            </div>
+            
+            <div class="circles-container" style="margin-top: 70px !important;">
+                <div class="color-circle" id="c-0"></div>
+                <div class="color-circle" id="c-1"></div>
+                <div class="color-circle" id="c-2"></div>
+                <div class="color-circle" id="c-3"></div>
+            </div>
+
+            <div class="screen-score" id="score-text">SCORE 0</div>
+        </div>
+
+        <div class="controls-area">
+            <div class="d-pad">
+                <div class="d-pad-h"></div>
+                <div class="d-pad-v"></div>
+            </div>
+
+            <div class="action-buttons" style="margin-top: 20px;">
+                <button class="action-btn btn-red" onclick="handleColorClick('red')"></button>
+                <button class="action-btn btn-blue" onclick="handleColorClick('blue')"></button>
+                <button class="action-btn btn-yellow" onclick="handleColorClick('yellow')"></button>
+                <button class="action-btn btn-green" onclick="handleColorClick('green')"></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- MANAJEMEN AUDIO & KONTROL MUSIK (SEAMLESS) ---
+    const bgMusic = document.getElementById('bg-music');
+    const musicBtn = document.getElementById('music-toggle-btn');
+    const musicIcon = document.getElementById('music-icon');
+    const volumeSlider = document.getElementById('volume-slider');
+
+    const sfxClick = document.getElementById('sfx-click');
+    const sfxCorrect = document.getElementById('sfx-correct');
+
+    // 1. Ambil data musik dari localStorage
+    const savedTime = localStorage.getItem('musicTime');
+    const savedVolume = localStorage.getItem('musicVolume');
+    const isMuted = localStorage.getItem('musicMuted');
+
+    if (savedTime) bgMusic.currentTime = parseFloat(savedTime);
+    if (savedVolume) {
+        bgMusic.volume = parseFloat(savedVolume);
+        volumeSlider.value = savedVolume;
+    } else {
+        bgMusic.volume = volumeSlider.value;
+    }
+
+    // 2. Simpan posisi musik secara terus-menerus
+    bgMusic.addEventListener('timeupdate', () => {
+        localStorage.setItem('musicTime', bgMusic.currentTime);
+    });
+
+    // 3. Fungsi putar musik
+    function playAudio() {
+        if (isMuted === 'true') return;
+        bgMusic.play().then(() => {
+            musicIcon.innerText = '🎵';
+        }).catch(err => {
+            console.log("Autoplay ditahan browser:", err);
+        });
+    }
+
+    // Jalankan musik otomatis begitu halaman dimuat
+    playAudio();
+
+    musicBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (bgMusic.paused) {
+            localStorage.setItem('musicMuted', 'false');
+            playAudio();
+        } else {
+            bgMusic.pause();
+            localStorage.setItem('musicMuted', 'true');
+            musicIcon.innerText = '🔇';
+        }
+    });
+
+    volumeSlider.addEventListener('input', (e) => {
+        bgMusic.volume = e.target.value;
+        localStorage.setItem('musicVolume', e.target.value);
+        if (e.target.value == 0) {
+            musicIcon.innerText = '🔇';
+        } else if (!bgMusic.paused) {
+            musicIcon.innerText = '🎵';
+        }
+    });
+
+    // Pancing audio berjalan saat ada sentuhan/klik tombol pertama jika ditahan browser
+    const unlockAudio = () => {
+        if (bgMusic.paused && localStorage.getItem('musicMuted') !== 'true') {
+            playAudio();
+        }
+        window.removeEventListener('click', unlockAudio);
+        window.removeEventListener('keydown', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
+    };
+
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+
+    // --- LOGIKA UTAMA GAME SIMON SAYS ---
+    const colors = ['red', 'blue', 'yellow', 'green'];
+    let gamePattern = [];
+    let userClickedPattern = [];
+    let round = 1;
+    let score = 0;
+    let isShowingPattern = false;
+    let countdownTimer = null;
+
+    const colorHex = {
+        'red': '#ff4757',
+        'blue': '#0984e3',
+        'yellow': '#ffa502',
+        'green': '#2ed573'
+    };
+
+    window.onload = function() {
+        startNewRound();
+    };
+
+    function startNewRound() {
+        if (countdownTimer) clearInterval(countdownTimer);
+        userClickedPattern = [];
+        isShowingPattern = true;
+        clearCircles();
+        
+        // Buat 4 pola warna acak baru
+        gamePattern = [];
+        for (let i = 0; i < 4; i++) {
+            let randomColor = colors[Math.floor(Math.random() * 4)];
+            gamePattern.push(randomColor);
+        }
+
+        let waktuHafal = round <= 5 ? 5 : 3;
+        document.getElementById('status-info').innerText = `RONDE ${round}`;
+        
+        // 1. Jalankan Fase Mengingat
+        showAllFourColors(waktuHafal);
+    }
+
+    // FASE 1: MENAMPILKAN 4 WARNA
+    function showAllFourColors(duration) {
+        const circles = document.querySelectorAll('.color-circle');
+        gamePattern.forEach((color, index) => {
+            if (circles[index]) {
+                circles[index].style.backgroundColor = colorHex[color];
+            }
+        });
+
+        let timeLeft = duration;
+        document.getElementById('timer-display').innerText = `TIME ${timeLeft}s`;
+
+        let intervalMS = round <= 5 ? 1000 : 600;
+
+        countdownTimer = setInterval(() => {
+            timeLeft--;
+            if (timeLeft >= 0) {
+                document.getElementById('timer-display').innerText = `TIME ${timeLeft}s`;
+            }
+
+            if (timeLeft <= 0) {
+                clearInterval(countdownTimer);
+                clearCircles();
+                
+                // Masuk ke Fase Menjawab
+                startAnswerCountdown();
+            }
+        }, intervalMS);
+    }
+
+    // FASE 2: TIMER COUNTDOWN GILIRAN MENJAWAB
+    function startAnswerCountdown() {
+        isShowingPattern = false;
+        document.getElementById('status-info').innerText = `JAWAB!`;
+        
+        let answerTime = 5; 
+        document.getElementById('timer-display').innerText = `TIME ${answerTime}s`;
+
+        countdownTimer = setInterval(() => {
+            answerTime--;
+            if (answerTime >= 0) {
+                document.getElementById('timer-display').innerText = `TIME ${answerTime}s`;
+            }
+
+            if (answerTime <= 0) {
+                clearInterval(countdownTimer);
+                triggerGameOver();
+            }
+        }, 1000);
+    }
+
+    function clearCircles() {
+        const circles = document.querySelectorAll('.color-circle');
+        circles.forEach(c => c.style.backgroundColor = '#dcdde1');
+    }
+
+    // KLIK TOMBOL WARNA + SFX
+    function handleColorClick(selectedColor) {
+        // Pancing audio musik latar pada pencetan tombol warna jika sempat tertahan
+        if (bgMusic.paused && localStorage.getItem('musicMuted') !== 'true') {
+            playAudio();
+        }
+
+        if (isShowingPattern) return;
+
+        // 1. Mainkan SFX Klik Tombol
+        if (sfxClick) {
+            sfxClick.currentTime = 0;
+            sfxClick.play();
+        }
+
+        userClickedPattern.push(selectedColor);
+        let currentIndex = userClickedPattern.length - 1;
+
+        // Tampilkan warna yang diklik ke layar
+        const circles = document.querySelectorAll('.color-circle');
+        if (circles[currentIndex]) {
+            circles[currentIndex].style.backgroundColor = colorHex[selectedColor];
+        }
+
+        // Cek tebakan
+        if (gamePattern[currentIndex] === userClickedPattern[currentIndex]) {
+            if (userClickedPattern.length === 4) {
+                clearInterval(countdownTimer);
+                score += 10;
+                round++;
+                document.getElementById('score-text').innerText = `SCORE ${score}`;
+                
+                // 2. Mainkan SFX Tebakan Benar
+                if (sfxCorrect) {
+                    sfxCorrect.currentTime = 0;
+                    sfxCorrect.play();
+                }
+
+                setTimeout(() => {
+                    startNewRound();
+                }, 800);
+            }
+        } else {
+            triggerGameOver();
+        }
+    }
+
+    function triggerGameOver() {
+        if (countdownTimer) clearInterval(countdownTimer);
+        document.getElementById('status-info').innerText = `GAME OVER`;
+        
+        let kunciString = gamePattern.length > 0 ? gamePattern.join(',') : '';
+        
+        setTimeout(() => {
+            window.location.href = `/gameover?score=${score}&kunci=${encodeURIComponent(kunciString)}`;
+        }, 1000);
+    }
+</script>
+
+</body>
+</html>
